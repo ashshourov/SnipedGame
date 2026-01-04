@@ -1,0 +1,11 @@
+﻿<Solution>
+  <Project Path="Mediapipe.Runtime.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="PlayFab.csproj" />
+  <Project Path="Mediapipe.Tests.EditMode.csproj" />
+  <Project Path="Unity.XR.Interaction.Toolkit.Samples.StarterAssets.csproj" />
+  <Project Path="Unity.XR.Interaction.Toolkit.Samples.StarterAssets.Editor.csproj" />
+  <Project Path="PlayFabSDKEditor.csproj" />
+  <Project Path="Unity.XR.Interaction.Toolkit.Samples.ARStarterAssets.csproj" />
+  <Project Path="Unity.XR.Interaction.Toolkit.Samples.ARStarterAssets.Editor.csproj" />
+</Solution>

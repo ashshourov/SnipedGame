@@ -1,84 +1,228 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.XR.ARFoundation;
-using System.Collections.Generic;
+
+public enum PlayerState
+{
+    ACTIVE,
+    RESPAWNING
+}
 
 public class SniperSystem : MonoBehaviour
 {
+    [Header("Player Status")]
+    public PlayerState currentState = PlayerState.ACTIVE;
+
+    private const float RESPAWN_DURATION = 20.0f;
+    private float respawnTimer = 0f;
+
+    [Header("Snipe Logic")]
+    private const float SNIPE_DURATION = 2.0f;
+    private float snipeTimer = 0f;
+
+    [Header("AR Components")]
     private ARFaceManager faceManager;
 
-    // Timer for the 2-second capture
-    private float snipeTimer = 0f;
-    private const float SNIPE_DURATION = 2.0f;
-
-    // This will hold the face we are currently targeting
-    private ARFace targetFace;
+    [Header("Manager References")]
+    public PopupManager popupManager;
 
     void Start()
     {
-        faceManager = GetComponent<ARFaceManager>();
+        // Get AR components (Unity 2023+ uses FindFirstObjectByType)
+        faceManager = FindFirstObjectByType<ARFaceManager>();
+        if (faceManager == null)
+        {
+            Debug.LogError("ARFaceManager not found in scene! AR functionality disabled.");
+        }
+
+        // Find PopupManager if not assigned
+        if (popupManager == null)
+        {
+            popupManager = FindFirstObjectByType<PopupManager>();
+            if (popupManager == null)
+            {
+                Debug.LogWarning("PopupManager not found. Popups will only show in Logcat.");
+            }
+        }
+
+        Debug.Log("SniperSystem initialized. Current state: " + currentState);
     }
 
     void Update()
     {
-        // 1. Check if we are detecting any faces
-        if (faceManager.trackables.count > 0)
+        // Check if player is authenticated with PlayFab
+        if (PlayFabManager.Instance != null && PlayFabManager.Instance.IsLoggedIn())
         {
-            // 2. Find the face closest to the center of the screen
-            targetFace = GetFaceClosestToCenter();
-
-            if (targetFace != null)
+            switch (currentState)
             {
-                // 3. If a face is targeted, start the timer
-                snipeTimer += Time.deltaTime;
+                case PlayerState.ACTIVE:
+                    HandleActiveState();
+                    break;
+                case PlayerState.RESPAWNING:
+                    HandleRespawningState();
+                    break;
+            }
+        }
+        else
+        {
+            // Waiting for authentication
+            // Don't spam logs - only log once per second
+            if (Time.frameCount % 60 == 0)
+            {
+                Debug.LogWarning("Waiting for user authentication to activate game logic.");
+            }
+        }
 
-                if (snipeTimer >= SNIPE_DURATION)
-                {
-                    // 4. SNIPE SUCCESSFUL!
-                    Debug.Log("SNIPE SUCCESSFUL! Target acquired.");
-                    // We will add backend logic here later.
-
-                    // Reset timer to prevent instant re-snipe
-                    snipeTimer = 0f;
-                }
-            } // <-- THIS WAS THE MISSING BRACE
+        // Debug test code (ONLY in Editor)
+#if UNITY_EDITOR
+        if (Input.GetKeyDown(KeyCode.T))
+        {
+            Debug.Log("T key pressed - Testing TargetSelectionUI");
+            TargetSelectionUI uiInstance = TargetSelectionUI.Instance;
+            if (uiInstance != null)
+            {
+                uiInstance.DisplayTeamList();
+            }
             else
             {
-                // No face is in the crosshair, reset timer
+                Debug.LogError("Cannot test UI: TargetSelectionUI.Instance is NULL!");
+            }
+        }
+#endif
+    }
+
+    void HandleActiveState()
+    {
+        if (faceManager == null) return;
+
+        // Check if we are detecting any faces
+        if (faceManager.trackables.count == 0)
+        {
+            if (snipeTimer > 0)
+            {
+                Debug.Log("Face lost. Resetting snipe timer.");
+                snipeTimer = 0f;
+            }
+            return;
+        }
+
+        // Find a detected face
+        ARFace targetFace = GetFirstDetectedFace();
+
+        if (targetFace != null)
+        {
+            // Face is detected, increment the timer
+            snipeTimer += Time.deltaTime;
+
+            // Log progress for debugging (every 0.5 seconds)
+            if (snipeTimer % 0.5f < Time.deltaTime)
+            {
+                Debug.Log($"Tracking face... {snipeTimer:F1}s / {SNIPE_DURATION}s");
+            }
+
+            // Check if timer reached the snipe duration
+            if (snipeTimer >= SNIPE_DURATION)
+            {
+                // Check if target is blocking
+                if (BlockSystem.isBlocking == false)
+                {
+                    Debug.Log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    Debug.Log("SNIPE SUCCESSFUL! Target confirmed via detection.");
+                    Debug.Log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    // Show success popup
+                    if (popupManager != null)
+                    {
+                        Debug.Log("Calling ShowSuccessPopup...");
+                        popupManager.ShowSuccessPopup();
+                    }
+                    else
+                    {
+                        Debug.LogError("PopupManager is null! Cannot show popup.");
+                    }
+
+                    // Display target selection UI
+                    Debug.Log("Attempting to show TargetSelectionUI...");
+                    TargetSelectionUI uiInstance = TargetSelectionUI.Instance;
+                    if (uiInstance != null)
+                    {
+                        Debug.Log("TargetSelectionUI found! Calling DisplayTeamList...");
+                        uiInstance.DisplayTeamList();
+                    }
+                    else
+                    {
+                        Debug.LogError("UI FAILURE: TargetSelectionUI Instance is NULL!");
+                        Debug.LogError("Make sure TargetSelectionUI script is in the scene and active!");
+                    }
+                }
+                else
+                {
+                    Debug.Log("SNIPE BLOCKED! Target was blocking.");
+                }
+
+                // Reset the timer after a snipe attempt
                 snipeTimer = 0f;
             }
         }
         else
         {
-            // No faces detected at all, reset timer
+            // Face was lost
             snipeTimer = 0f;
         }
     }
 
-    private ARFace GetFaceClosestToCenter()
+    void HandleRespawningState()
     {
-        float minDistance = float.MaxValue;
-        ARFace closestFace = null;
+        respawnTimer -= Time.deltaTime;
 
-        // Get screen center
-        Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
-
-        foreach (ARFace face in faceManager.trackables)
+        // Log every second
+        if (Mathf.FloorToInt(respawnTimer) != Mathf.FloorToInt(respawnTimer + Time.deltaTime))
         {
-            // Get the 2D screen position of the face
-            Vector2 facePosition = Camera.main.WorldToScreenPoint(face.transform.position);
-
-            // Check distance from center
-            float distance = Vector2.Distance(facePosition, screenCenter);
-
-            // We also need a "threshold" to act as the crosshair
-            // If distance is < 200 pixels, it's not in the crosshair
-            if (distance < minDistance && distance < 200f)
-            {
-                minDistance = distance;
-                closestFace = face;
-            }
+            Debug.Log($"Respawning... {Mathf.CeilToInt(respawnTimer)}s left");
         }
 
-        return closestFace; // This will be null if no face is in the crosshair
+        if (respawnTimer <= 0)
+        {
+            currentState = PlayerState.ACTIVE;
+            respawnTimer = 0f;
+            snipeTimer = 0f;
+            Debug.Log("Respawn complete! You are ACTIVE again.");
+        }
+    }
+
+    // Called by StatusListener to start the timer
+    public void StartRespawnTimer(float duration)
+    {
+        if (currentState == PlayerState.ACTIVE)
+        {
+            currentState = PlayerState.RESPAWNING;
+            respawnTimer = duration;
+            snipeTimer = 0f;
+            Debug.Log($"SERVER NOTIFICATION: YOU WERE SNIPED! Respawning for {duration:F1} seconds.");
+        }
+    }
+
+    // Debug function
+    public void GotSniped()
+    {
+        if (currentState == PlayerState.ACTIVE)
+        {
+            currentState = PlayerState.RESPAWNING;
+            respawnTimer = RESPAWN_DURATION;
+            snipeTimer = 0f;
+            Debug.Log($"YOU WERE SNIPED! Respawning for {RESPAWN_DURATION} seconds.");
+        }
+    }
+
+    // Helper function
+    private ARFace GetFirstDetectedFace()
+    {
+        if (faceManager != null && faceManager.trackables.count > 0)
+        {
+            foreach (ARFace face in faceManager.trackables)
+            {
+                return face;
+            }
+        }
+        return null;
     }
 }

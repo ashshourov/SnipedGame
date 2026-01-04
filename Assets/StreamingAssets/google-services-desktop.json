@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "195580928756",
+    "project_id": "sniped-9694d",
+    "storage_bucket": "sniped-9694d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:195580928756:android:326a476106f6fbbafc34a1",
+        "android_client_info": {
+          "package_name": "com.unity.template.ar_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCN4orkhKN-EMe5-GX9nY2VmK2y-7Gz_Y4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
